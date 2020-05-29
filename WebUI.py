@@ -31,36 +31,18 @@ def checkKwargsWithDefaults(dictionaryOfDefaultKwargs, kwargDict):
             kwargDict[arg] = dictionaryOfDefaultKwargs[arg]
     return kwargDict
 
-##### HandlerSubclass #####
-class WebUIHandler(http.server.BaseHTTPRequestHandler):
 
 class WebUI():
     """
     Threaded daemon code from:
     https://riptutorial.com/python/example/8570/start-simple-httpserver-in-a-thread-and-open-the-browser
-    from http.server import HTTPServer, CGIHTTPRequestHandler
-    import webbrowser
-    import threading
 
-    def start_server(path, port=8000):
-        '''Start a simple webserver serving path on port'''
-        os.chdir(path)
-        httpd = HTTPServer(('', port), CGIHTTPRequestHandler)
-        httpd.serve_forever()
-
-    # Start the server in a new thread
-    port = 8000
-    daemon = threading.Thread(name='daemon_server',
-                              target=start_server,
-                              args=('.', port)
-    daemon.setDaemon(True) # Set as a daemon so it will be killed once the main thread is dead.
-    daemon.start()
-
-    # Open the web browser
-    webbrowser.open('http://localhost:{}'.format(port))
     """
 
     def __init__(self, **kwargs):
+        listOfMandatoryKwargs = ["requestHandler" # this is the BaseHTTPRequestHandler to be passed to http.server
+                                ]
+        checkMandatoryKwargs(listOfMandatoryKwargs, kwargs)
         defaultKwargsDict = {"serverAddress":('localhost',8000)}
         checkKwargsWithDefaults(defaultKwargsDict, kwargs)
         self.kwargs = kwargs
@@ -79,11 +61,12 @@ class WebUI():
             # probably keyboard interrupt
             logger.debug("Graceful shutdown")
             self.httpdserver.shutdown()
+            logger.debug("Post http.server.shutdown()")
             sys.exit()
 
     def go(self):
         # This starts the server and then calls the web browser to it
-        self.httpdserver = http.server.HTTPServer(self.kwargs["serverAddress"],self)
+        self.httpdserver = http.server.HTTPServer(self.kwargs["serverAddress"],self.kwargs["requestHandler"])
         daemon = threading.Thread(name='daemon_server',
                                   target=self.serverThreadTarget)
         daemon.setDaemon(True) # Set as a daemon so it will be killed once the main thread is dead.
@@ -94,20 +77,24 @@ class WebUI():
         webbrowser.open(url)
         self.waitForStop()
 
-    ##### Verbs #####
-    def do_GET(self, handlerObject):
-        logger.debug("do_GET")
-        return "Does this work"
+
+class WebUIHandler(http.server.BaseHTTPRequestHandler):
+
+    def sendResponse(self, type, data, additionalHeadersList = False):
+        # additionalHeadersList is list of header tuples
+        # Need some sort of static cookies sender here so different requests
+        # can send/access the same cookies
+        self.send_response(200)
+        self.send_header("Content-Type", type)
+        self.send_header("Content-Length", len(data))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def sendTextResponse(self, textToSend, additionalHeadersList = False):
+        self.sendResponse("text/plain", textToSend.encode(), additionalHeadersList)
+        pass
 
 
-
-    ##### HandlerSubclass #####
-    class WebUIHandler(http.server.BaseHTTPRequestHandler):
-
-        def setVerbSource(self, verbSourceObj):
-            self.VSO = verbSourceObj
-
-        def do_GET(self):
-            logger.debug("WebUIHandler.do_GET")
-            return self.VSO.do_GET(self)
-            
+    def do_GET(self):
+        logger.debug("WebUIHandler.do_GET at {}".format(time.asctime()))
+        self.sendTextResponse("{}: Does this work".format(time.asctime()))

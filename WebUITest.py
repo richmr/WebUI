@@ -1,7 +1,9 @@
-from WebUI import WebUI
+from WebUI import WebUI, WebUIHandler
 
 def test1():
-    test = WebUI()
+    kargs = {"requestHandler":WebUIHandler}
+    test = WebUI(**kargs)
     test.go()
+    # working
 
 test1()
