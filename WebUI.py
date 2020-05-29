@@ -74,7 +74,7 @@ webbrowser.open('http://localhost:{}'.format(port))
         # Just give a second for it to start
         time.sleep(1)
         url = "http://%s:%i" % self.kwargs["serverAddress"]
-        webbrowser.open()
+        webbrowser.open(url)
 
 
     ##### VERB HANDLERS #####
