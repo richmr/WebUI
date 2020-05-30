@@ -80,6 +80,8 @@ class WebUI():
 
 class WebUIHandler(http.server.BaseHTTPRequestHandler):
 
+    GLOBAL_COOKIES = None
+
     def sendResponse(self, type, data, additionalHeadersList = False):
         # additionalHeadersList is list of header tuples
         # Need some sort of static cookies sender here so different requests
@@ -87,13 +89,15 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", type)
         self.send_header("Content-Length", len(data))
+        if additionalHeadersList:
+            for hdr in additionalHeadersList:
+                self.send_header(hdr[0], hdr[1])
+        #TODO: self.sendCookies ?
         self.end_headers()
         self.wfile.write(data)
 
     def sendTextResponse(self, textToSend, additionalHeadersList = False):
         self.sendResponse("text/plain", textToSend.encode(), additionalHeadersList)
-        pass
-
 
     def do_GET(self):
         logger.debug("WebUIHandler.do_GET at {}".format(time.asctime()))
