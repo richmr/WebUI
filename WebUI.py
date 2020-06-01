@@ -40,12 +40,17 @@ class WebUI():
     """
 
     def __init__(self, **kwargs):
-        listOfMandatoryKwargs = ["requestHandler" # this is the BaseHTTPRequestHandler to be passed to http.server
+        listOfMandatoryKwargs = ["requestHandler", # this is the BaseHTTPRequestHandler to be passed to http.server
                                 ]
         checkMandatoryKwargs(listOfMandatoryKwargs, kwargs)
-        defaultKwargsDict = {"serverAddress":('localhost',8000)}
+        defaultKwargsDict = {"serverAddress":('localhost',8000),
+                            "browser":"default", # This can be any of https://docs.python.org/3/library/webbrowser.html.  Default opens system default
+                             }
         checkKwargsWithDefaults(defaultKwargsDict, kwargs)
         self.kwargs = kwargs
+        self.webbrowser = webbrowser.get()
+        if self.kwargs["browser"] != "default":
+            self.webbrowser = webbrowser.get(self.kwargs["browser"])
         pass
 
     def serverThreadTarget(self):
@@ -74,13 +79,13 @@ class WebUI():
         # Just give a second for it to start
         time.sleep(1)
         url = "http://%s:%i/" % self.kwargs["serverAddress"]
-        webbrowser.open(url)
+        self.webbrowser.open(url)
         self.waitForStop()
 
 
 class WebUIHandler(http.server.BaseHTTPRequestHandler):
 
-    GLOBAL_COOKIES = None
+    GLOBAL_COOKIES = False
 
     def sendResponse(self, type, data, additionalHeadersList = False):
         # additionalHeadersList is list of header tuples
@@ -92,13 +97,32 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
         if additionalHeadersList:
             for hdr in additionalHeadersList:
                 self.send_header(hdr[0], hdr[1])
-        #TODO: self.sendCookies ?
+        if WebUIHandler.GLOBAL_COOKIES:
+            # This expects GLOBAL_COOKIES to be a http.cookies object
+            # This call will throw if it isn't
+            self.send_header(WebUIHandler.GLOBAL_COOKIES.output())
         self.end_headers()
         self.wfile.write(data)
 
     def sendTextResponse(self, textToSend, additionalHeadersList = False):
+        # I should probably uuencode?
         self.sendResponse("text/plain", textToSend.encode(), additionalHeadersList)
+
+    def sendJSONResponse(self, jsonToSend, additionalHeadersList = False):
+        # Do i need to encode?
+        self.sendResponse("application/json", jsonToSend.encode(), additionalHeadersList)
 
     def do_GET(self):
         logger.debug("WebUIHandler.do_GET at {}".format(time.asctime()))
-        self.sendTextResponse("{}: Does this work".format(time.asctime()))
+        # This is meant to be overridden, but may want to call the super to handle some basic calls
+        # Will return FALSE if it did not handle the call
+        # Return favicon.ico
+        if self.path == "/favicon.ico":
+            logger.debug("favicon.ico response requested")
+            with open("favicon.ico", "rb") as ico:
+                data = ico.read()
+                self.sendResponse("image/x-icon", data)
+            return True
+
+        logger.debug("WebUIHandler.do_GET at {}".format(time.asctime()))
+        self.sendTextResponse("{}: got path {}".format(time.asctime(), self.path))
