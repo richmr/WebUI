@@ -5,7 +5,8 @@ from WebUI import WebUI, WebUIHandler
 
 def test1():
     kargs = {"requestHandler":WebUIHandler,
-            "browser":"firefox"}
+            "browser":"firefox",
+            "startpage":"opscheck.html"}
     test = WebUI(**kargs)
     test.go()
     # working

@@ -45,6 +45,7 @@ class WebUI():
         checkMandatoryKwargs(listOfMandatoryKwargs, kwargs)
         defaultKwargsDict = {"serverAddress":('localhost',8000),
                             "browser":"default", # This can be any of https://docs.python.org/3/library/webbrowser.html.  Default opens system default
+                             "startpage":"",
                              }
         checkKwargsWithDefaults(defaultKwargsDict, kwargs)
         self.kwargs = kwargs
@@ -78,11 +79,12 @@ class WebUI():
         daemon.start()
         # Just give a second for it to start
         time.sleep(1)
-        url = "http://%s:%i/" % self.kwargs["serverAddress"]
+        url = "http://%s:%i/" % self.kwargs["serverAddress"] + self.kwargs["startpage"]
         self.webbrowser.open(url)
         self.waitForStop()
 
 from os import path
+import json
 
 class WebUIHandler(http.server.BaseHTTPRequestHandler):
 
@@ -113,6 +115,12 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
         # Do i need to encode?
         self.sendResponse("application/json", jsonToSend.encode(), additionalHeadersList)
 
+    def sendHTMLPage(self, htmlToSend, additionalHeadersList = False):
+        self.sendResponse("text/html", htmlToSend.encode(), additionalHeadersList)
+
+    def sendHTMLPageFromFile(self, filename, additionalHeadersList = False):
+        self.sendHTMLPage(self.getFileContent(filename), additionalHeadersList)
+
     def getFileContent(self, filename, binary=False):
         # need to be prepared for bundling
         # Code taken from pyinstaller docs
@@ -131,14 +139,46 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
         logger.debug("WebUIHandler.do_GET at {}".format(time.asctime()))
         # This is meant to be overridden, but may want to call the super first to handle some basic calls
         # Will return FALSE if it did not handle the call
+
+        # specific handlers first
         if self.path == "/favicon.ico":
             logger.debug("favicon.ico response requested")
             self.sendResponse("image/x-icon", self.getFileContent("favicon.ico", binary=True))
             return True
+
+        # general handlers for relative file paths
         if self.path.endswith(".js"):
             logger.debug("asked for js file {}".format(self.path))
             self.sendResponse("text/javascript", self.getFileContent(self.path[1:], binary=True))
             return True
+        if self.path.endswith(".html"):
+            logger.debug("asked for html file {}".format(self.path))
+            self.sendHTMLPageFromFile(self.path[1:])
+            return True
+        if self.path.endswith(".css"):
+            logger.debug("asked for css file {}".format(self.path))
+            self.sendResponse("text/css", self.getFileContent(self.path[1:], binary=True).encode())
+            return True
 
-        logger.debug("WebUIHandler.do_GET at {}".format(time.asctime()))
-        self.sendTextResponse("{}: got path {}".format(time.asctime(), self.path))
+        return False
+
+    def decodeDataAsJSON(self):
+        data = self.rfile.read(int(self.headers['Content-Length']))
+        logger.debug("POST data received: {}".format(data))
+        toreturn = json.loads(data)
+        return toreturn
+
+    def do_POST(self):
+        logger.debug("WebUIHandler.do_POST at {}".format(time.asctime()))
+        # This is meant to be overridden, but may want to call the super first to handle some basic calls
+        # Will return FALSE if it did not handle the call
+
+        # specific handlers first
+        if self.path == "/opscheck.html":
+            # find the "returnthis" data and return it
+            received = self.decodeDataAsJSON()
+            toreturn = received["returnthis"]
+            self.sendTextResponse(toreturn)
+            return True
+
+        return False
