@@ -82,6 +82,7 @@ class WebUI():
         self.webbrowser.open(url)
         self.waitForStop()
 
+from os import path
 
 class WebUIHandler(http.server.BaseHTTPRequestHandler):
 
@@ -112,16 +113,27 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
         # Do i need to encode?
         self.sendResponse("application/json", jsonToSend.encode(), additionalHeadersList)
 
+    def getFileContent(self, filename, binary=False):
+        # need to be prepared for bundling
+        # Code taken from pyinstaller docs
+        # https://pyinstaller.readthedocs.io/en/stable/runtime-information.html#run-time-information
+        bundle_dir = getattr(sys, '_MEIPASS', path.abspath(path.dirname(__file__)))
+        path_to_file = path.join(bundle_dir, filename)
+
+        readstring = "r"
+        if binary:
+            readstring = "rb"
+
+        with open(path_to_file, readstring) as f:
+            return f.read()
+
     def do_GET(self):
         logger.debug("WebUIHandler.do_GET at {}".format(time.asctime()))
-        # This is meant to be overridden, but may want to call the super to handle some basic calls
+        # This is meant to be overridden, but may want to call the super first to handle some basic calls
         # Will return FALSE if it did not handle the call
-        # Return favicon.ico
         if self.path == "/favicon.ico":
             logger.debug("favicon.ico response requested")
-            with open("favicon.ico", "rb") as ico:
-                data = ico.read()
-                self.sendResponse("image/x-icon", data)
+            self.sendResponse("image/x-icon", self.getFileContent("favicon.ico", binary=True))
             return True
 
         logger.debug("WebUIHandler.do_GET at {}".format(time.asctime()))

@@ -1,4 +1,4 @@
 # WebUI
  Wrap python projects in a webUI
 
-pyinstaller -F [final script]
+pyinstaller -F WebUITest.spec
