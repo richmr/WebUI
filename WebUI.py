@@ -135,6 +135,10 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
             logger.debug("favicon.ico response requested")
             self.sendResponse("image/x-icon", self.getFileContent("favicon.ico", binary=True))
             return True
+        if self.path.endswith(".js"):
+            logger.debug("asked for js file {}".format(self.path))
+            self.sendResponse("text/javascript", self.getFileContent(self.path[1:], binary=True))
+            return True
 
         logger.debug("WebUIHandler.do_GET at {}".format(time.asctime()))
         self.sendTextResponse("{}: got path {}".format(time.asctime(), self.path))

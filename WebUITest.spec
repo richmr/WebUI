@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+# pyinstaller -F WebUITest.spec
 
 block_cipher = None
 
@@ -6,7 +7,8 @@ block_cipher = None
 a = Analysis(['WebUITest.py'],
              pathex=['C:\\Users\\mrich\\Documents\\WebUI'],
              binaries=[],
-             datas=[('favicon.ico','.')],
+             datas=[('favicon.ico','.'),
+                    ('js/test.js', 'js')],
              hiddenimports=[],
              hookspath=[],
              runtime_hooks=[],
