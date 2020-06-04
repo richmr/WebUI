@@ -43,9 +43,12 @@ class WebUI():
         listOfMandatoryKwargs = ["requestHandler", # this is the BaseHTTPRequestHandler to be passed to http.server
                                 ]
         checkMandatoryKwargs(listOfMandatoryKwargs, kwargs)
-        defaultKwargsDict = {"serverAddress":('localhost',8000),
+        defaultKwargsDict = {"serverhost":'localhost',
+                            "serverport":8000,
                             "browser":"default", # This can be any of https://docs.python.org/3/library/webbrowser.html.  Default opens system default
-                             "startpage":"",
+                             "startpage":"", # Where does the browser open to
+                             "numberPortTries":100, # Number of times WebUI will increment port number looking for an open port before failing
+
                              }
         checkKwargsWithDefaults(defaultKwargsDict, kwargs)
         self.kwargs = kwargs
@@ -72,14 +75,16 @@ class WebUI():
 
     def go(self):
         # This starts the server and then calls the web browser to it
-        self.httpdserver = http.server.HTTPServer(self.kwargs["serverAddress"],self.kwargs["requestHandler"])
+        serverAddress = (self.kwargs["serverhost"],self.kwargs["serverport"])
+        self.httpdserver = http.server.HTTPServer(serverAddress,self.kwargs["requestHandler"])
+        logger.debug("Serving on {}".format(self.httpdserver.socket))
         daemon = threading.Thread(name='daemon_server',
                                   target=self.serverThreadTarget)
         daemon.setDaemon(True) # Set as a daemon so it will be killed once the main thread is dead.
         daemon.start()
         # Just give a second for it to start
         time.sleep(1)
-        url = "http://%s:%i/" % self.kwargs["serverAddress"] + self.kwargs["startpage"]
+        url = "http://%s:%i/" % serverAddress + self.kwargs["startpage"]
         self.webbrowser.open(url)
         self.waitForStop()
 
