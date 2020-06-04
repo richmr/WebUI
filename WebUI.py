@@ -90,11 +90,11 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
 
     GLOBAL_COOKIES = False
 
-    def sendResponse(self, type, data, additionalHeadersList = False):
+    def sendResponse(self, type, data, additionalHeadersList = False, responseCode = 200):
         # additionalHeadersList is list of header tuples
         # Need some sort of static cookies sender here so different requests
         # can send/access the same cookies
-        self.send_response(200)
+        self.send_response(responseCode)
         self.send_header("Content-Type", type)
         self.send_header("Content-Length", len(data))
         if additionalHeadersList:
@@ -121,6 +121,13 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
     def sendHTMLPageFromFile(self, filename, additionalHeadersList = False):
         self.sendHTMLPage(self.getFileContent(filename), additionalHeadersList)
 
+    def sendErrorPageWithMessage(self, errorCode, errorMessage):
+        htmlsnippet = "<html><head><title>WebUI Error</title></head>\n"
+        htmlsnippet += "<body><h3>Error: {}<br></h3>\n".format(errorCode)
+        htmlsnippet += "<h5>{}</h5></body></html\n".format(errorMessage)
+        self.sendResponse("text/html", htmlsnippet.encode(), False, errorCode)
+
+
     def getFileContent(self, filename, binary=False):
         # need to be prepared for bundling
         # Code taken from pyinstaller docs
@@ -132,8 +139,15 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
         if binary:
             readstring = "rb"
 
-        with open(path_to_file, readstring) as f:
-            return f.read()
+        try:
+            with open(path_to_file, readstring) as f:
+                return f.read()
+        except FileNotFoundError as filebadnews:
+            self.sendErrorPageWithMessage(404, "Couldn't find {}".format(filename))
+            raise filebadnews
+        except Exception as badnews:
+            self.sendErrorPageWithMessage(500, "Oops: {}".format(badnews))
+            raise badnews
 
     def do_GET(self):
         logger.debug("WebUIHandler.do_GET at {}".format(time.asctime()))
@@ -165,8 +179,15 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
     def decodeDataAsJSON(self):
         data = self.rfile.read(int(self.headers['Content-Length']))
         logger.debug("POST data received: {}".format(data))
-        toreturn = json.loads(data)
-        return toreturn
+        try:
+            toreturn = json.loads(data)
+            return toreturn
+        except json.JSONDecodeError as badjson:
+            self.sendErrorPageWithMessage(400, "Can't parse following data as JSON:<br><pre>{}</pre>".format(data))
+            raise badjson
+        except Exception as badnews:
+            self.sendErrorPageWithMessage(500, "Oops: {}".format(badnews))
+            raise badnews
 
     def do_POST(self):
         logger.debug("WebUIHandler.do_POST at {}".format(time.asctime()))
