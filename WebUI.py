@@ -48,7 +48,6 @@ class WebUI():
                             "browser":"default", # This can be any of https://docs.python.org/3/library/webbrowser.html.  Default opens system default
                              "startpage":"", # Where does the browser open to
                              "numberPortTries":100, # Number of times WebUI will increment port number looking for an open port before failing
-
                              }
         checkKwargsWithDefaults(defaultKwargsDict, kwargs)
         self.kwargs = kwargs
@@ -75,8 +74,21 @@ class WebUI():
 
     def go(self):
         # This starts the server and then calls the web browser to it
-        serverAddress = (self.kwargs["serverhost"],self.kwargs["serverport"])
-        self.httpdserver = http.server.HTTPServer(serverAddress,self.kwargs["requestHandler"])
+        port = self.kwargs["serverport"]
+        maxport = self.kwargs["serverport"] + self.kwargs["numberPortTries"]
+        started = False
+        while not started:
+            if port <= maxport:
+                serverAddress = (self.kwargs["serverhost"],port)
+                try:
+                    self.httpdserver = WebUIHTTPServer(serverAddress,self.kwargs["requestHandler"])
+                    started = True
+                except:
+                    logger.debug("Failed to open on port {}".format(port))
+                    port += 1
+            else:
+                raise Exception("Unable to start server at port {} with {} tries".format(self.kwargs["serverport"], self.kwargs["numberPortTries"]))
+
         logger.debug("Serving on {}".format(self.httpdserver.socket))
         daemon = threading.Thread(name='daemon_server',
                                   target=self.serverThreadTarget)
@@ -87,6 +99,32 @@ class WebUI():
         url = "http://%s:%i/" % serverAddress + self.kwargs["startpage"]
         self.webbrowser.open(url)
         self.waitForStop()
+
+#--------------------------------------
+
+import socketserver
+import socket
+
+class WebUIHTTPServer(http.server.HTTPServer):
+    # Need to overide server_bind to catch Windows inability to block already in use sockets
+    # Code from: https://stackoverflow.com/questions/51090637/running-a-python-web-server-twice-on-the-same-port-on-windows-no-port-already
+
+    def server_bind(self):
+        # This tests if the socket option exists (i.e. only on Windows), then
+        # sets it.
+        if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            # Also need to change the value of allow_reuse_address
+            WebUIHTTPServer.allow_reuse_address = 0
+
+        # The rest is from: https://github.com/python/cpython/blob/3.8/Lib/http/server.py
+        """Override server_bind to store the server name."""
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = socket.getfqdn(host)
+        self.server_port = port
+
+#--------------------------------------
 
 from os import path
 import json
