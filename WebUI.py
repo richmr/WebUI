@@ -1,9 +1,16 @@
 # Michael Rich, 2020
+"""
+WARNING (AND I CANT STRESS THIS ENOUGH): WebUI is NOT designed to be a public server
+It is designed to provide a cross-platform UI for applications
+WebUI, as is, is not secure.  If you serve a public page with this you will be vulnerable
+to much of the OWASP Top 10.
+DO NOT USE THIS TO PROVIDE A PUBLIC SERVICE!!
+"""
 
 # basic imports
 import logging
 logger = logging.getLogger('WebUI')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 ch = logging.StreamHandler()
 formatter = logging.Formatter('%(name)s:%(levelname)s:%(message)s')
 ch.setFormatter(formatter)
@@ -110,11 +117,10 @@ class WebUIHTTPServer(http.server.HTTPServer):
     # Code from: https://stackoverflow.com/questions/51090637/running-a-python-web-server-twice-on-the-same-port-on-windows-no-port-already
 
     def server_bind(self):
-        # This tests if the socket option exists (i.e. only on Windows), then
-        # sets it.
+        # This tests if the socket option exists (i.e. only on Windows), then sets it.
         if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-            # Also need to change the value of allow_reuse_address
+            # Also need to change the value of allow_reuse_address (defined in http.server.HTTPServer)
             WebUIHTTPServer.allow_reuse_address = 0
 
         # The rest is from: https://github.com/python/cpython/blob/3.8/Lib/http/server.py
@@ -128,6 +134,7 @@ class WebUIHTTPServer(http.server.HTTPServer):
 
 from os import path
 import json
+import urllib.parse as parse
 
 class WebUIHandler(http.server.BaseHTTPRequestHandler):
 
@@ -164,6 +171,13 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
     def sendHTMLPageFromFile(self, filename, additionalHeadersList = False):
         self.sendHTMLPage(self.getFileContent(filename), additionalHeadersList)
 
+    def sendTemplatedHTMLPageFromFile(self, filename, valuesDict, additionalHeadersList = False):
+        # Templated pages look like: <p>Error code: %(code)d</p>
+        # expects a dictionary with the same value names as keys
+        template = self.getFileContent(filename).decode()
+        templatefilled = template % valuesDict
+        self.sendHTMLPage(templatefilled.encode(), additionalHeadersList)
+
     def sendErrorPageWithMessage(self, errorCode, errorMessage):
         htmlsnippet = "<html><head><title>WebUI Error</title></head>\n"
         htmlsnippet += "<body><h3>Error: {}<br></h3>\n".format(errorCode)
@@ -192,33 +206,6 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
             self.sendErrorPageWithMessage(500, "Oops: {}".format(badnews))
             raise badnews
 
-    def do_GET(self):
-        logger.debug("WebUIHandler.do_GET at {}".format(time.asctime()))
-        # This is meant to be overridden, but may want to call the super first to handle some basic calls
-        # Will return FALSE if it did not handle the call
-
-        # specific handlers first
-        if self.path == "/favicon.ico":
-            logger.debug("favicon.ico response requested")
-            self.sendResponse("image/x-icon", self.getFileContent("favicon.ico", binary=True))
-            return True
-
-        # general handlers for relative file paths
-        if self.path.endswith(".js"):
-            logger.debug("asked for js file {}".format(self.path))
-            self.sendResponse("text/javascript", self.getFileContent(self.path[1:], binary=True))
-            return True
-        if self.path.endswith(".html"):
-            logger.debug("asked for html file {}".format(self.path))
-            self.sendHTMLPageFromFile(self.path[1:])
-            return True
-        if self.path.endswith(".css"):
-            logger.debug("asked for css file {}".format(self.path))
-            self.sendResponse("text/css", self.getFileContent(self.path[1:], binary=True).encode())
-            return True
-
-        return False
-
     def decodeDataAsJSON(self):
         data = self.rfile.read(int(self.headers['Content-Length']))
         logger.debug("POST data received: {}".format(data))
@@ -232,13 +219,50 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
             self.sendErrorPageWithMessage(500, "Oops: {}".format(badnews))
             raise badnews
 
+    def do_GET(self):
+        logger.debug("WebUIHandler.do_GET at {}".format(time.asctime()))
+        # This is meant to be overridden, but may want to call the super first to handle some basic calls
+        # Will return FALSE if it did not handle the call
+
+        # complete the path parse
+        parsedPath = parse.urlparse(self.path)
+        self.realpath = parsedPath.path
+        self.getparams = parsedPath.query
+
+        # specific handlers first
+        if self.realpath == "favicon.ico":
+            logger.debug("favicon.ico response requested")
+            self.sendResponse("image/x-icon", self.getFileContent("favicon.ico", binary=True))
+            return True
+
+        # general handlers for relative file paths
+        if self.realpath.endswith(".js"):
+            logger.debug("asked for js file {}".format(self.path))
+            self.sendResponse("text/javascript", self.getFileContent(self.path[1:], binary=True))
+            return True
+        if self.realpath.endswith(".html"):
+            logger.debug("asked for html file {}".format(self.path))
+            self.sendHTMLPageFromFile(self.path[1:])
+            return True
+        if self.realpath.endswith(".css"):
+            logger.debug("asked for css file {}".format(self.path))
+            self.sendResponse("text/css", self.getFileContent(self.path[1:], binary=True).encode())
+            return True
+
+        return False
+
     def do_POST(self):
         logger.debug("WebUIHandler.do_POST at {}".format(time.asctime()))
         # This is meant to be overridden, but may want to call the super first to handle some basic calls
         # Will return FALSE if it did not handle the call
 
+        # complete the path parse
+        parsedPath = parse.urlparse(self.path)
+        self.realpath = parsedPath.path
+        self.getparams = parsedPath.query
+
         # specific handlers first
-        if self.path == "/opscheck.html":
+        if self.realpath == "opscheck.html":
             # find the "returnthis" data and return it
             received = self.decodeDataAsJSON()
             toreturn = received["returnthis"]
