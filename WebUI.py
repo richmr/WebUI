@@ -140,6 +140,36 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
 
     GLOBAL_COOKIES = False
 
+    # The following is a dictionary of standard MIME Types the WebUIHandler can handle
+    # automagically.
+    # Format is "file extension":{"mime":"mime/type", "binary":True/False}
+    # Examples are below
+    # remove a key if you want to change the handle, or do not call the super DO_GET() at all
+    # HTML type is specifcally excluded because this is the one most likely to
+    # want specific handling
+    AUTOMAGIC_MIME_TYPES = {
+        ".js":{"mime":"text/javascript", "binary":False},
+        ".css":{"mime":"text/css", "binary":False},
+        ".json":{"mime":"application/json", "binary":False},
+        ".txt":{"mime":"text/plain", "binary":False},
+        # Binary Types
+        ".bmp":{"mime":"image/bmp", "binary":True},
+        ".gif":{"mime":"image/gif", "binary":True},
+        ".ico":{"mime":"image/x-icon", "binary":True},
+        ".jpeg":{"mime":"image/jpeg", "binary":True},
+        ".jpg":{"mime":"image/jpeg", "binary":True},
+        ".mp3":{"mime":"audio/mpeg", "binary":True},
+        ".mpeg":{"mime":"video/mpeg", "binary":True},
+        ".png":{"mime":"image/png", "binary":True},
+        ".pdf":{"mime":"application/pdf", "binary":True},
+        ".tif":{"mime":"image/tiff", "binary":True},
+        ".tiff":{"mime":"image/tiff", "binary":True},
+        ".ttf":{"mime":"font/ttf", "binary":True},
+        ".wav":{"mime":"audio/wav", "binary":True},
+        ".woff":{"mime":"font/woff", "binary":True},
+        ".woff2":{"mime":"font/woff2", "binary":True},
+        }
+
     def sendResponse(self, type, data, additionalHeadersList = False, responseCode = 200):
         # additionalHeadersList is list of header tuples
         # Need some sort of static cookies sender here so different requests
@@ -219,6 +249,9 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
             self.sendErrorPageWithMessage(500, "Oops: {}".format(badnews))
             raise badnews
 
+    def parseGetParameters(self):
+        return parse.parse_qs(self.getparams)
+
     def do_GET(self):
         logger.debug("WebUIHandler.do_GET at {}".format(time.asctime()))
         # This is meant to be overridden, but may want to call the super first to handle some basic calls
@@ -229,25 +262,18 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
         self.realpath = parsedPath.path
         self.getparams = parsedPath.query
 
-        # specific handlers first
-        if self.realpath == "favicon.ico":
-            logger.debug("favicon.ico response requested")
-            self.sendResponse("image/x-icon", self.getFileContent("favicon.ico", binary=True))
+        # Singular handlers go here
+        if self.realpath == "/opscheck.html":
+            self.sendHTMLPageFromFile("opscheck.html")
             return True
 
-        # general handlers for relative file paths
-        if self.realpath.endswith(".js"):
-            logger.debug("asked for js file {}".format(self.path))
-            self.sendResponse("text/javascript", self.getFileContent(self.path[1:], binary=True))
-            return True
-        if self.realpath.endswith(".html"):
-            logger.debug("asked for html file {}".format(self.path))
-            self.sendHTMLPageFromFile(self.path[1:])
-            return True
-        if self.realpath.endswith(".css"):
-            logger.debug("asked for css file {}".format(self.path))
-            self.sendResponse("text/css", self.getFileContent(self.path[1:], binary=True).encode())
-            return True
+        # Now mime handlers as defined in AUTOMAGIC_MIME_TYPES:
+        for key in WebUIHandler.AUTOMAGIC_MIME_TYPES:
+            mimetype = WebUIHandler.AUTOMAGIC_MIME_TYPES[key]["mime"]
+            if self.realpath.endswith(key):
+                data = self.getFileContent(self.path[1:], binary=True)
+                self.sendResponse(mimetype, data)
+                return True
 
         return False
 
@@ -262,7 +288,7 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
         self.getparams = parsedPath.query
 
         # specific handlers first
-        if self.realpath == "opscheck.html":
+        if self.realpath == "/opscheck.html":
             # find the "returnthis" data and return it
             received = self.decodeDataAsJSON()
             toreturn = received["returnthis"]
