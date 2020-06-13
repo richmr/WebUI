@@ -20,7 +20,7 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 import WebUI
 
-class SampleApp(WebUIHandler):
+class SampleAppHandler(WebUI.WebUIHandler):
 
     # Do not overide __init__ unless you pay close attention to the
     # requirements of http.server.BaseHTTPRequestHandler
@@ -35,6 +35,22 @@ class SampleApp(WebUIHandler):
         superHandledIt = super().do_GET()
         if not superHandledIt:
             # handle the remaining requests
-            if self.path == "/index.html":
-                self.sendResponse("image/x-icon", self.getFileContent("favicon.ico", binary=True))
-                return True
+            if self.realpath == "/SampleApp.html":
+                params = self.parseGetParameters()
+                templateData = {"user":"Dave"}
+                if "user" in params.keys():
+                    templateData["user"] = ",".join(params["user"])
+                self.sendTemplatedHTMLPageFromFile("SampleApp.html",templateData)
+                return
+        else:
+            # Super did it, we need to exit
+            return
+
+        self.sendErrorPageWithMessage(404, "{} not found".format(self.realpath))
+
+# Now we call the WebUI
+kargs = {"requestHandler":SampleAppHandler,
+        "browser":"firefox",
+        "startpage":"SampleApp.html"}
+SampleAppServer = WebUI.WebUI(**kargs)
+SampleAppServer.go()

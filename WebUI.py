@@ -133,8 +133,10 @@ class WebUIHTTPServer(http.server.HTTPServer):
 #--------------------------------------
 
 from os import path
+import os
 import json
 import urllib.parse as parse
+from pathlib import Path
 
 class WebUIHandler(http.server.BaseHTTPRequestHandler):
 
@@ -204,9 +206,9 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
     def sendTemplatedHTMLPageFromFile(self, filename, valuesDict, additionalHeadersList = False):
         # Templated pages look like: <p>Error code: %(code)d</p>
         # expects a dictionary with the same value names as keys
-        template = self.getFileContent(filename).decode()
+        template = self.getFileContent(filename)
         templatefilled = template % valuesDict
-        self.sendHTMLPage(templatefilled.encode(), additionalHeadersList)
+        self.sendHTMLPage(templatefilled, additionalHeadersList)
 
     def sendErrorPageWithMessage(self, errorCode, errorMessage):
         htmlsnippet = "<html><head><title>WebUI Error</title></head>\n"
@@ -220,7 +222,7 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
         # Code taken from pyinstaller docs
         # https://pyinstaller.readthedocs.io/en/stable/runtime-information.html#run-time-information
         bundle_dir = getattr(sys, '_MEIPASS', path.abspath(path.dirname(__file__)))
-        path_to_file = path.join(bundle_dir, filename)
+        path_to_file = os.path.join(bundle_dir, filename)
 
         readstring = "r"
         if binary:
@@ -235,6 +237,41 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
         except Exception as badnews:
             self.sendErrorPageWithMessage(500, "Oops: {}".format(badnews))
             raise badnews
+
+    def walk(self, filename, size, lastmodtime, startPath):
+        foundfiles = []
+        for p, d, f in os.walk(str(startPath)):
+            for file in f:
+                if file.endswith(filename):
+                    fullpath = os.path.join(p, file)
+                    thissize = os.path.getsize(fullpath)
+                    thistime = os.path.getmtime()
+                    if (thissize == size) and (thistime == lastmodtime):
+                        foundfiles.append(fullpath)
+
+        return foundfiles
+
+    def findFile(self, filename, size, lastmodtime, startPath = '.'):
+        # One of the problems with WebUI is access to full file names from a file selection widget
+        # You won't get a full path
+        # You can either make your own file selection widget, which I don't want to build
+        # Or try to find the file the user selected, I opted for this
+        # this will search for filename of the given size and modtime and return all that match
+        # to try and speed things up, the finder will start in the directory the app started in first
+        # then it will check the home directory of the user.
+        # you can specify a start path.
+        # will return all matches that work, so prepare to handle that
+        # last mod time may be problematic..  what if something outside the code is updating
+        # that file and you want to open it with this tool?  Like a log?
+        foundfiles = self.walk(filename, size, lastmodtime, startPath)
+        if len(foundfiles) == 0:
+            foundfiles = self.walk(filename, size, lastmodtime, Path.home())
+
+        if len(foundfiles) == 0:
+            raise Exception("File not found {}".format())
+
+        return foundfiles
+        
 
     def decodeDataAsJSON(self):
         data = self.rfile.read(int(self.headers['Content-Length']))
