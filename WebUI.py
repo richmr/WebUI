@@ -58,9 +58,13 @@ class WebUI():
                              }
         checkKwargsWithDefaults(defaultKwargsDict, kwargs)
         self.kwargs = kwargs
-        self.webbrowser = webbrowser.get()
-        if self.kwargs["browser"] != "default":
-            self.webbrowser = webbrowser.get(self.kwargs["browser"])
+        # Can specify a browser of False and then the code will just run a website
+        if self.kwargs["browser"]:
+            self.webbrowser = webbrowser.get()
+            if self.kwargs["browser"] != "default":
+                self.webbrowser = webbrowser.get(self.kwargs["browser"])
+        else:
+            self.webbrowser = False
         pass
 
     def serverThreadTarget(self):
@@ -104,7 +108,8 @@ class WebUI():
         # Just give a second for it to start
         time.sleep(1)
         url = "http://%s:%i/" % serverAddress + self.kwargs["startpage"]
-        self.webbrowser.open(url)
+        if self.webbrowser:
+            self.webbrowser.open(url)
         self.waitForStop()
 
 #--------------------------------------
@@ -271,7 +276,7 @@ class WebUIHandler(http.server.BaseHTTPRequestHandler):
             raise Exception("File not found {}".format())
 
         return foundfiles
-        
+
 
     def decodeDataAsJSON(self):
         data = self.rfile.read(int(self.headers['Content-Length']))
